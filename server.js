@@ -156,12 +156,10 @@ app.post('/download-image-detail', async (req, res) => {
         console.log(`Fetching video details for: ${videoUrl}`);
         const videoInfo = await ytdl.getInfo(videoUrl);
 
-        let videoTitle = sanitizeFilename(videoInfo.videoDetails.title);
-        const thumbnailUrl = videoInfo.videoDetails.thumbnails.pop().url;
-
-        // Ensure UTF-8 filenames
-        const safeTitle = sanitizeFilename(videoTitle);  // Properly sanitize Unicode filenames
+        const videoTitle = sanitizeFilename(videoInfo.videoDetails.title);
+        const safeTitle = sanitizeFilename(videoTitle);
         const safeArtist = sanitizeFilename(videoInfo.videoDetails.author.name);
+        const thumbnailUrl = videoInfo.videoDetails.thumbnails.pop()?.url;
 
         const audioMp4Path = path.join(downloadsDir, `temp_audio.mp4`);
         const outputRawFilePath = path.join(downloadsDir, `temp_audio_1.mp3`);
@@ -175,34 +173,31 @@ app.post('/download-image-detail', async (req, res) => {
             const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
             const writeStream = fs.createWriteStream(audioMp4Path);
             audioStream.pipe(writeStream);
+
             await new Promise((resolve, reject) => {
                 writeStream.on('finish', resolve);
-            
-                writeStream.on('error', (err) => {
-                    console.error("File write error:", err.message);
-                    reject(new Error("File download failed: " + err.message));
-                });
-            
-                audioStream.on('error', (err) => {
-                    console.error("YouTube download error:", err.message);
-                    reject(new Error("YouTube download failed: " + err.message));
-                });
+                writeStream.on('error', reject);
+                audioStream.on('error', reject);
             });
         } catch (err) {
             console.error("YouTube download error:", err.message);
+            return res.status(500).json({ error: 'YouTube download failed' });
         }
 
         // Download thumbnail image
         let imageExists = false;
-        try {
-            const imageResponse = await axios({ url: thumbnailUrl, responseType: 'stream' });
-            const imageWriteStream = fs.createWriteStream(thumbnailPath);
-            imageResponse.data.pipe(imageWriteStream);
-            await new Promise((resolve) => imageWriteStream.on('finish', resolve));
-            imageExists = true;
-        } catch (err) {
-            console.warn("Thumbnail download failed, proceeding without it.");
+        if (thumbnailUrl) {
+            try {
+                const imageResponse = await axios({ url: thumbnailUrl, responseType: 'stream' });
+                const imageWriteStream = fs.createWriteStream(thumbnailPath);
+                imageResponse.data.pipe(imageWriteStream);
+                await new Promise((resolve) => imageWriteStream.on('finish', resolve));
+                imageExists = true;
+            } catch (err) {
+                console.warn("Thumbnail download failed, proceeding without it.");
+            }
         }
+
         console.log(`Download complete: ${audioMp4Path}`);
 
         if (!fs.existsSync(audioMp4Path)) {
@@ -221,15 +216,13 @@ app.post('/download-image-detail', async (req, res) => {
             comment: `Downloaded from '${videoUrl}'`
         });
 
-        // Add thumbnail and finalize metadata
+        // Add metadata and finalize
         await addMetadata(outputRawFilePath, outputFilePath, imageExists ? thumbnailPath : null);
 
-        // Cleanup
-        fs.unlinkSync(audioMp4Path);
-        fs.unlinkSync(outputRawFilePath);
-        if (imageExists) fs.unlinkSync(thumbnailPath);
+        // Cleanup temporary files
+        cleanupFiles([audioMp4Path, outputRawFilePath, imageExists ? thumbnailPath : null]);
 
-        res.json({ success: true, file: `/downloads/${safeTitle}.mp3` });
+        res.json({ success: true, fileUrl: `/downloads/${encodeURIComponent(safeTitle)}.mp3` });
 
     } catch (error) {
         console.error(`Processing error: ${error.message}`);
@@ -243,22 +236,19 @@ function convertToMp3(inputPath, outputPath, metadata) {
         ffmpeg(inputPath)
             .toFormat('mp3')
             .outputOptions([
-                `-metadata`, `title=${metadata.title !== '' ? metadata.title.replace(/["]/g, '') : ''}`,
-                `-metadata`, `artist=${metadata.artist !== '' ? metadata.artist.replace(/["]/g, '') : ''}`,
-                `-metadata`, `album=${metadata.album !== '' ? metadata.album.replace(/["]/g, '') : ''}`,
-                `-metadata`, `genre=${metadata.genre}`,
-                `-metadata`, `comment=${metadata.comment !== '' ? metadata.comment.replace(/["]/g, '') : ''}`,
-                '-id3v2_version', '3',  // Use ID3v2.3 for Unicode
+                '-metadata', `title=${sanitizeMetadata(metadata.title)}`,
+                '-metadata', `artist=${sanitizeMetadata(metadata.artist)}`,
+                '-metadata', `album=${sanitizeMetadata(metadata.album)}`,
+                '-metadata', `genre=${metadata.genre}`,
+                '-metadata', `comment=${sanitizeMetadata(metadata.comment)}`,
+                '-id3v2_version', '3', // Use ID3v2.3 for Unicode
                 '-metadata', 'encoding=UTF-8' // Ensures correct metadata encoding
             ])
             .on('end', () => {
                 console.log(`MP3 conversion complete: ${outputPath}`);
                 resolve(true);
             })
-            .on('error', (err) => {
-                console.error(`FFmpeg MP3 conversion error: ${err.message}`);
-                reject(err);
-            })
+            .on('error', reject)
             .save(outputPath);
     });
 }
@@ -279,39 +269,46 @@ function addMetadata(audioPath, outputPath, thumbnailPath) {
 
         command
             .outputOptions([
-                '-id3v2_version', '3',  // ID3v2.3 is the best format for Unicode
-                '-metadata', 'encoding=UTF-8' // Ensures FFmpeg metadata works with Unicode
+                '-id3v2_version', '3', // Use ID3v2.3 for Unicode
+                '-metadata', 'encoding=UTF-8'
             ])
             .on('end', () => {
                 console.log(`Metadata & thumbnail added: ${outputPath}`);
                 resolve(true);
             })
-            .on('error', (err) => {
-                console.error(`FFmpeg metadata error: ${err.message}`);
-                reject(err);
-            })
+            .on('error', reject)
             .save(outputPath);
     });
 }
 
 // Sanitize filename for Unicode support
-const sanitizeFilename = (title) => {
+function sanitizeFilename(title) {
     return title
-        .normalize("NFKD")  // Normalize Unicode (e.g., ü → u)
+        .normalize("NFKD") // Normalize Unicode (e.g., ü → u)
         .replace(/[\u0300-\u036f]/g, "") // Remove diacritics (accents)
         .replace(/[<>:"\/\\|?*]+/g, '') // Remove invalid filesystem characters
         .replace(/\s+/g, '_') // Replace spaces with underscores
         .trim();
-};
+}
 
-const sanitizeName = (title) => {
-    return title
-        .normalize("NFKD")  // Normalize Unicode (e.g., ü → u)
-        .replace(/[\u0300-\u036f]/g, "") // Remove diacritics (accents)
-        .replace(/[<>:"\/\\|?*]+/g, '') // Remove invalid filesystem characters
-        .trim();
-};
+// Sanitize metadata values (removes quotes that may break FFmpeg metadata)
+function sanitizeMetadata(value) {
+    return value ? value.replace(/["]/g, '') : '';
+}
 
+// Cleanup temporary files
+function cleanupFiles(files) {
+    files.forEach(file => {
+        if (file && fs.existsSync(file)) {
+            try {
+                fs.unlinkSync(file);
+                console.log(`Deleted: ${file}`);
+            } catch (err) {
+                console.error(`Error deleting file ${file}: ${err.message}`);
+            }
+        }
+    });
+}
 
 // Serve downloaded files
 app.use('/downloads', express.static(downloadsDir));
