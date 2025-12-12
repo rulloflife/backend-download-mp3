@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const ytdl = require("@distube/ytdl-core")
+const ytdlp = require("yt-dlp-exec");
 const ffmpeg = require('fluent-ffmpeg');
 const axios = require('axios');
 
@@ -16,135 +16,220 @@ const downloadsDir = path.resolve(__dirname, 'downloads');
 // Ensure downloads directory exists
 if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
 
-app.post('/download', async (req, res) => {
-    const videoUrl = req.body.url;
-    if (!ytdl.validateURL(videoUrl)) {
-        return res.status(400).json({ error: 'Invalid YouTube URL' });
-    }
+// app.post('/download', async (req, res) => {
+//     const videoUrl = req.body.url;
+//     if (!ytdl.validateURL(videoUrl)) {
+//         return res.status(400).json({ error: 'Invalid YouTube URL' });
+//     }
 
-    try {
-        // Fetch video info
-        const info = await ytdl.getInfo(videoUrl);
-        let videoTitle = info.videoDetails.title;
+//     try {
+//         // Fetch video info
+//         const info = await ytdl.getInfo(videoUrl);
+//         let videoTitle = info.videoDetails.title;
 
-        // Sanitize title (remove special characters that might cause file system issues)
-        videoTitle = videoTitle.replace(/[<>:"/\\|?*]+/g, "").replace(/\s+/g, "_");
+//         // Sanitize title (remove special characters that might cause file system issues)
+//         videoTitle = videoTitle.replace(/[<>:"/\\|?*]+/g, "").replace(/\s+/g, "_");
 
-        const audioMp4Path = path.join(downloadsDir, `${videoTitle}.mp4`);
-        const outputFilePath = path.join(downloadsDir, `${videoTitle}.mp3`);
+//         const audioMp4Path = path.join(downloadsDir, `${videoTitle}.mp4`);
+//         const outputFilePath = path.join(downloadsDir, `${videoTitle}.mp3`);
 
-        console.log(`Downloading audio from: ${videoUrl}`);
+//         console.log(`Downloading audio from: ${videoUrl}`);
 
-        // Download audio as .mp4 first
-        const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
-        const writeStream = fs.createWriteStream(audioMp4Path);
-        audioStream.pipe(writeStream);
+//         // Download audio as .mp4 first
+//         const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
+//         const writeStream = fs.createWriteStream(audioMp4Path);
+//         audioStream.pipe(writeStream);
 
-        writeStream.on('finish', () => {
-            console.log(`Download complete: ${audioMp4Path}`);
+//         writeStream.on('finish', () => {
+//             console.log(`Download complete: ${audioMp4Path}`);
 
-            // Convert to MP3
-            ffmpeg(audioMp4Path)
-                .toFormat('mp3')
-                .on('end', () => {
-                    console.log(`Conversion complete: ${outputFilePath}`);
+//             // Convert to MP3
+//             ffmpeg(audioMp4Path)
+//                 .toFormat('mp3')
+//                 .on('end', () => {
+//                     console.log(`Conversion complete: ${outputFilePath}`);
 
-                    // Remove the temporary .mp4 file
-                    fs.unlinkSync(audioMp4Path);
+//                     // Remove the temporary .mp4 file
+//                     fs.unlinkSync(audioMp4Path);
 
-                    // Send response with download link
-                    res.json({ success: true, file: `/downloads/${videoTitle}.mp3` });
-                })
-                .save(outputFilePath);
-        });
+//                     // Send response with download link
+//                     res.json({ success: true, file: `/downloads/${videoTitle}.mp3` });
+//                 })
+//                 .save(outputFilePath);
+//         });
 
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-app.post('/download-image', async (req, res) => {
-    const videoUrl = req.body.url;
-    if (!videoUrl) {
-        return res.status(400).json({ error: 'Invalid YouTube URL' });
-    }
+//     } catch (error) {
+//         console.error(error);
+//         res.status(500).json({ error: 'Internal server error' });
+//     }
+// });
+// app.post('/download-image', async (req, res) => {
+//     const videoUrl = req.body.url;
+//     if (!videoUrl) {
+//         return res.status(400).json({ error: 'Invalid YouTube URL' });
+//     }
 
-    try {
-        console.log(`Fetching video details for: ${videoUrl}`);
-        const videoInfo = await ytdl.getInfo(videoUrl);
+//     try {
+//         console.log(`Fetching video details for: ${videoUrl}`);
+//         const videoInfo = await ytdl.getInfo(videoUrl);
 
-        let videoTitle = sanitizeFilename(videoInfo.videoDetails.title);
-        const thumbnailUrl = videoInfo.videoDetails.thumbnails.pop().url;
+//         let videoTitle = sanitizeFilename(videoInfo.videoDetails.title);
+//         const thumbnailUrl = videoInfo.videoDetails.thumbnails.pop().url;
 
-        // Ensure UTF-8 filenames
-        const safeTitle = sanitizeFilename(videoTitle);  // Properly sanitize Unicode filenames
-        const safeArtist = sanitizeFilename(videoInfo.videoDetails.author.name);
+//         // Ensure UTF-8 filenames
+//         const safeTitle = sanitizeFilename(videoTitle);  // Properly sanitize Unicode filenames
+//         const safeArtist = sanitizeFilename(videoInfo.videoDetails.author.name);
 
-        const audioMp4Path = path.join(downloadsDir, `temp_audio.mp4`);
-        const outputRawFilePath = path.join(downloadsDir, `temp_audio_1.mp3`);
-        const outputFilePath = path.join(downloadsDir, `${safeTitle}.mp3`);
-        const thumbnailPath = path.join(downloadsDir, `thumbnail.jpg`);
+//         const audioMp4Path = path.join(downloadsDir, `temp_audio.mp4`);
+//         const outputRawFilePath = path.join(downloadsDir, `temp_audio_1.mp3`);
+//         const outputFilePath = path.join(downloadsDir, `${safeTitle}.mp3`);
+//         const thumbnailPath = path.join(downloadsDir, `thumbnail.jpg`);
 
-        console.log(`Downloading audio: ${safeTitle}`);
+//         console.log(`Downloading audio: ${safeTitle}`);
 
-        // Download audio as .mp4
-        const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
-        const writeStream = fs.createWriteStream(audioMp4Path);
-        audioStream.pipe(writeStream);
+//         // Download audio as .mp4
+//         const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
+//         const writeStream = fs.createWriteStream(audioMp4Path);
+//         audioStream.pipe(writeStream);
 
-        // Download thumbnail image
-        let imageExists = false;
-        try {
-            const imageResponse = await axios({ url: thumbnailUrl, responseType: 'stream' });
-            const imageWriteStream = fs.createWriteStream(thumbnailPath);
-            imageResponse.data.pipe(imageWriteStream);
-            await new Promise((resolve) => imageWriteStream.on('finish', resolve));
-            imageExists = true;
-        } catch (err) {
-            console.warn("Thumbnail download failed, proceeding without it.");
-        }
+//         // Download thumbnail image
+//         let imageExists = false;
+//         try {
+//             const imageResponse = await axios({ url: thumbnailUrl, responseType: 'stream' });
+//             const imageWriteStream = fs.createWriteStream(thumbnailPath);
+//             imageResponse.data.pipe(imageWriteStream);
+//             await new Promise((resolve) => imageWriteStream.on('finish', resolve));
+//             imageExists = true;
+//         } catch (err) {
+//             console.warn("Thumbnail download failed, proceeding without it.");
+//         }
 
-        await new Promise((resolve, reject) => {
-            writeStream.on('finish', resolve); // Resolve when file writing is complete
+//         await new Promise((resolve, reject) => {
+//             writeStream.on('finish', resolve); // Resolve when file writing is complete
 
-            writeStream.on('error', (err) => {
-                console.error("File write error:", err.message);
-                reject(new Error("Failed to write file: " + err.message));
-            });
-        });
-        console.log(`Download complete: ${audioMp4Path}`);
+//             writeStream.on('error', (err) => {
+//                 console.error("File write error:", err.message);
+//                 reject(new Error("Failed to write file: " + err.message));
+//             });
+//         });
+//         console.log(`Download complete: ${audioMp4Path}`);
 
-        if (!fs.existsSync(audioMp4Path)) {
-            return res.status(500).json({ error: 'Audio file missing after download' });
-        }
+//         if (!fs.existsSync(audioMp4Path)) {
+//             return res.status(500).json({ error: 'Audio file missing after download' });
+//         }
 
-        console.log('Title:', safeTitle);
-        console.log('Artist:', safeArtist);
+//         console.log('Title:', safeTitle);
+//         console.log('Artist:', safeArtist);
 
-        // Convert MP4 to MP3 with metadata
-        await convertToMp3(audioMp4Path, outputRawFilePath, {
-            title: '',
-            artist: '',
-            album: '',
-            genre: '',
-            comment: ''
-        });
+//         // Convert MP4 to MP3 with metadata
+//         await convertToMp3(audioMp4Path, outputRawFilePath, {
+//             title: '',
+//             artist: '',
+//             album: '',
+//             genre: '',
+//             comment: ''
+//         });
 
-        // Add thumbnail and finalize metadata
-        await addMetadata(outputRawFilePath, outputFilePath, imageExists ? thumbnailPath : null);
+//         // Add thumbnail and finalize metadata
+//         await addMetadata(outputRawFilePath, outputFilePath, imageExists ? thumbnailPath : null);
 
-        // Cleanup
-        fs.unlinkSync(audioMp4Path);
-        fs.unlinkSync(outputRawFilePath);
-        if (imageExists) fs.unlinkSync(thumbnailPath);
+//         // Cleanup
+//         fs.unlinkSync(audioMp4Path);
+//         fs.unlinkSync(outputRawFilePath);
+//         if (imageExists) fs.unlinkSync(thumbnailPath);
 
-        res.json({ success: true, file: `/downloads/${safeTitle}.mp3` });
+//         res.json({ success: true, file: `/downloads/${safeTitle}.mp3` });
 
-    } catch (error) {
-        console.error(`Processing error: ${error.message}`);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
+//     } catch (error) {
+//         console.error(`Processing error: ${error.message}`);
+//         res.status(500).json({ error: 'Internal server error' });
+//     }
+// });
+
+// app.post('/download-image-detail', async (req, res) => {
+//     const videoUrl = req.body.url;
+//     if (!videoUrl) {
+//         return res.status(400).json({ error: 'Invalid YouTube URL' });
+//     }
+
+//     try {
+//         console.log(`Fetching video details for: ${videoUrl}`);
+//         const videoInfo = await ytdl.getInfo(videoUrl);
+
+//         const videoTitle = sanitizeFilename(videoInfo.videoDetails.title);
+//         const safeTitle = sanitizeFilename(videoTitle);
+//         const safeArtist = sanitizeFilename(videoInfo.videoDetails.author.name);
+//         const thumbnailUrl = videoInfo.videoDetails.thumbnails.pop()?.url;
+
+//         const audioMp4Path = path.join(downloadsDir, `temp_audio.mp4`);
+//         const outputRawFilePath = path.join(downloadsDir, `temp_audio_1.mp3`);
+//         const outputFilePath = path.join(downloadsDir, `${safeTitle}.mp3`);
+//         const thumbnailPath = path.join(downloadsDir, `thumbnail.jpg`);
+
+//         console.log(`Downloading audio: ${safeTitle}`);
+
+//         // Download audio as .mp4
+//         try {
+//             const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
+//             const writeStream = fs.createWriteStream(audioMp4Path);
+//             audioStream.pipe(writeStream);
+
+//             await new Promise((resolve, reject) => {
+//                 writeStream.on('finish', resolve);
+//                 writeStream.on('error', reject);
+//                 audioStream.on('error', reject);
+//             });
+//         } catch (err) {
+//             console.log(err)
+//             console.error("YouTube download error:", err.message);
+//             return res.status(500).json({ error: 'YouTube download failed' });
+//         }
+
+//         // Download thumbnail image
+//         let imageExists = false;
+//         if (thumbnailUrl) {
+//             try {
+//                 const imageResponse = await axios({ url: thumbnailUrl, responseType: 'stream' });
+//                 const imageWriteStream = fs.createWriteStream(thumbnailPath);
+//                 imageResponse.data.pipe(imageWriteStream);
+//                 await new Promise((resolve) => imageWriteStream.on('finish', resolve));
+//                 imageExists = true;
+//             } catch (err) {
+//                 console.warn("Thumbnail download failed, proceeding without it.");
+//             }
+//         }
+
+//         console.log(`Download complete: ${audioMp4Path}`);
+
+//         if (!fs.existsSync(audioMp4Path)) {
+//             return res.status(500).json({ error: 'Audio file missing after download' });
+//         }
+
+//         console.log('Title:', safeTitle);
+//         console.log('Artist:', safeArtist);
+
+//         // Convert MP4 to MP3 with metadata
+//         await convertToMp3(audioMp4Path, outputRawFilePath, {
+//             title: safeTitle || 'unknown',
+//             artist: safeArtist || 'unknown',
+//             album: safeArtist || 'unknown',
+//             genre: "Music",
+//             comment: `Downloaded from '${videoUrl}'`
+//         });
+
+//         // Add metadata and finalize
+//         await addMetadata(outputRawFilePath, outputFilePath, imageExists ? thumbnailPath : null);
+
+//         // Cleanup temporary files
+//         cleanupFiles([audioMp4Path, outputRawFilePath, imageExists ? thumbnailPath : null]);
+
+//         res.json({ success: true, fileUrl: `/downloads/${encodeURIComponent(safeTitle)}.mp3` });
+
+//     } catch (error) {
+//         console.error(`Processing error: ${error.message}`);
+//         res.status(500).json({ error: 'Internal server error' });
+//     }
+// });
 
 app.post('/download-image-detail', async (req, res) => {
     const videoUrl = req.body.url;
@@ -154,81 +239,73 @@ app.post('/download-image-detail', async (req, res) => {
 
     try {
         console.log(`Fetching video details for: ${videoUrl}`);
-        const videoInfo = await ytdl.getInfo(videoUrl);
 
-        const videoTitle = sanitizeFilename(videoInfo.videoDetails.title);
-        const safeTitle = sanitizeFilename(videoTitle);
-        const safeArtist = sanitizeFilename(videoInfo.videoDetails.author.name);
-        const thumbnailUrl = videoInfo.videoDetails.thumbnails.pop()?.url;
+        const videoInfo = await ytdlp(videoUrl, {
+            dumpSingleJson: true, // returns video details JSON
+            noCheckCertificates: true,
+            preferFreeFormats: true,
+        });
 
-        const audioMp4Path = path.join(downloadsDir, `temp_audio.mp4`);
-        const outputRawFilePath = path.join(downloadsDir, `temp_audio_1.mp3`);
-        const outputFilePath = path.join(downloadsDir, `${safeTitle}.mp3`);
+        const videoTitle = sanitizeFilename(videoInfo.title);
+        const safeArtist = sanitizeFilename(videoInfo.uploader);
+        const thumbnailUrl = videoInfo.thumbnail;
+
+
+        console.log('Title:', videoTitle);
+        console.log('Artist:', safeArtist);
+        console.log('Thumbnail URL:', thumbnailUrl);
+
         const thumbnailPath = path.join(downloadsDir, `thumbnail.jpg`);
+        const outputRawFilePath = path.join(downloadsDir, `${videoTitle}_draft.mp3`);
+        const outputFilePath = path.join(downloadsDir, `${videoTitle}.mp3`);
 
-        console.log(`Downloading audio: ${safeTitle}`);
+        console.log(`Downloading audio using yt-dlp: ${videoTitle}`);
 
-        // Download audio as .mp4
-        try {
-            const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
-            const writeStream = fs.createWriteStream(audioMp4Path);
-            audioStream.pipe(writeStream);
+        // ✅ DOWNLOAD + CONVERT AUDIO
+        await ytdlp(videoUrl, {
+            extractAudio: true,
+            audioFormat: "mp3",
+            output: outputRawFilePath,
+        });
+        console.log(`Audio download complete: ${outputRawFilePath}`);
 
-            await new Promise((resolve, reject) => {
-                writeStream.on('finish', resolve);
-                writeStream.on('error', reject);
-                audioStream.on('error', reject);
-            });
-        } catch (err) {
-            console.error("YouTube download error:", err.message);
-            return res.status(500).json({ error: 'YouTube download failed' });
-        }
-
-        // Download thumbnail image
+        // ✅ DOWNLOAD THUMBNAIL
         let imageExists = false;
         if (thumbnailUrl) {
             try {
-                const imageResponse = await axios({ url: thumbnailUrl, responseType: 'stream' });
-                const imageWriteStream = fs.createWriteStream(thumbnailPath);
-                imageResponse.data.pipe(imageWriteStream);
-                await new Promise((resolve) => imageWriteStream.on('finish', resolve));
+                const img = await axios({ url: thumbnailUrl, responseType: 'stream' });
+                const ws = fs.createWriteStream(thumbnailPath);
+                img.data.pipe(ws);
+                await new Promise(r => ws.on('finish', r));
                 imageExists = true;
-            } catch (err) {
-                console.warn("Thumbnail download failed, proceeding without it.");
-            }
+            } catch { }
         }
 
-        console.log(`Download complete: ${audioMp4Path}`);
-
-        if (!fs.existsSync(audioMp4Path)) {
-            return res.status(500).json({ error: 'Audio file missing after download' });
-        }
-
-        console.log('Title:', safeTitle);
-        console.log('Artist:', safeArtist);
-
-        // Convert MP4 to MP3 with metadata
-        await convertToMp3(audioMp4Path, outputRawFilePath, {
-            title: safeTitle || 'unknown',
-            artist: safeArtist || 'unknown',
-            album: safeArtist || 'unknown',
-            genre: "Music",
-            comment: `Downloaded from '${videoUrl}'`
+        // ✅ ADD METADATA & THUMBNAIL
+        await new Promise((resolve, reject) => {
+            ffmpeg(outputRawFilePath)
+                .outputOptions([
+                    '-metadata', `title=${videoTitle}`,
+                    '-metadata', `artist=${safeArtist}`,
+                    '-id3v2_version', '3',
+                ])
+                .input(imageExists ? thumbnailPath : null)
+                .outputOptions(imageExists ? ['-map 0:a', '-map 1:v', '-c:v mjpeg'] : [])
+                .save(outputFilePath)
+                .on('end', resolve)
+                .on('error', reject);
         });
 
-        // Add metadata and finalize
-        await addMetadata(outputRawFilePath, outputFilePath, imageExists ? thumbnailPath : null);
+        // ✅ Now cleanup ONLY AFTER ffmpeg `end` event fired
+        cleanupFiles([outputRawFilePath, imageExists ? thumbnailPath : null]);
 
-        // Cleanup temporary files
-        cleanupFiles([audioMp4Path, outputRawFilePath, imageExists ? thumbnailPath : null]);
+        res.json({ success: true, fileUrl: `/downloads/${encodeURIComponent(videoTitle)}.mp3` });
 
-        res.json({ success: true, fileUrl: `/downloads/${encodeURIComponent(safeTitle)}.mp3` });
-
-    } catch (error) {
-        console.error(`Processing error: ${error.message}`);
-        res.status(500).json({ error: 'Internal server error' });
+    } catch (err) {
+        res.status(500).json({ error: 'Download failed', message: err.message });
     }
 });
+
 
 // Convert MP4 to MP3 with Unicode support
 function convertToMp3(inputPath, outputPath, metadata) {
