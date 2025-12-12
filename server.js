@@ -14,6 +14,7 @@ const port = 5000;
 const downloadsDir = path.resolve(__dirname, 'downloads');
 ffmpeg.setFfmpegPath(path.join(__dirname, "ffmpeg/ffmpeg"));
 ffmpeg.setFfprobePath(path.join(__dirname, "ffmpeg/ffprobe"));
+const ytDlpPath = path.join(__dirname, "bin/yt-dlp");
 
 // Ensure downloads directory exists
 if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
@@ -246,6 +247,7 @@ app.post('/download-image-detail', async (req, res) => {
             dumpSingleJson: true, // returns video details JSON
             noCheckCertificates: true,
             preferFreeFormats: true,
+            binary: ytDlpPath
         });
 
         const videoTitle = sanitizeFilename(videoInfo.title);
@@ -268,6 +270,7 @@ app.post('/download-image-detail', async (req, res) => {
             extractAudio: true,
             audioFormat: "mp3",
             output: outputRawFilePath,
+            binary: ytDlpPath
         });
         console.log(`Audio download complete: ${outputRawFilePath}`);
 
