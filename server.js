@@ -12,6 +12,8 @@ app.use(express.json());
 
 const port = 5000;
 const downloadsDir = path.resolve(__dirname, 'downloads');
+ffmpeg.setFfmpegPath(path.join(__dirname, "ffmpeg/ffmpeg"));
+ffmpeg.setFfprobePath(path.join(__dirname, "ffmpeg/ffprobe"));
 
 // Ensure downloads directory exists
 if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
